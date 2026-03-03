@@ -23,28 +23,7 @@ jobs:
           echo "version=v${version}" >> "$GITHUB_OUTPUT"
           echo "Detected elementary OS version: v${version}"
 
-      - name: Check if release already exists
-        id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "${{ steps.version.outputs.version }}" --repo "${{ github.repository }}" > /dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Release ${{ steps.version.outputs.version }} already exists, skipping."
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Download community logo and convert to ICO
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          curl -fsSL -o community-black.png \
-            "https://raw.githubusercontent.com/elementary/brand/main/community/community-black.png"
-          sudo apt-get update && sudo apt-get install -y imagemagick
-          convert community-black.png -define icon:auto-resize=256,128,64,48,32,16 elementary-community.ico
-
       - name: Export base rootfs
-        if: steps.check.outputs.exists == 'false'
         run: |
           container_id=$(docker create ghcr.io/elementary/docker:stable)
           docker export "$container_id" -o rootfs.tar
@@ -53,7 +32,6 @@ jobs:
           tar xf rootfs.tar -C rootfs-work
 
       - name: Apply WSL customizations
-        if: steps.check.outputs.exists == 'false'
         run: |
           # WSL config files
           cp rootfs/etc/wsl-distribution.conf rootfs-work/etc/
@@ -87,13 +65,18 @@ jobs:
           rm -rf rootfs-work/var/lib/apt/lists/* rootfs-work/tmp/* rootfs-work/var/tmp/*
 
       - name: Package rootfs
-        if: steps.check.outputs.exists == 'false'
         run: |
           tar czf elementaryOS.wsl -C rootfs-work .
           ls -lh elementaryOS.wsl
 
+      - name: Delete existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "${{ steps.version.outputs.version }}" \
+            --repo "${{ github.repository }}" --cleanup-tag -y 2>/dev/null || true
+
       - name: Create GitHub Release
-        if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
