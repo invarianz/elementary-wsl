@@ -1,0 +1,112 @@
+name: Build elementary OS WSL
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1' # Weekly on Monday at 06:00 UTC
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          version=$(docker run --rm ghcr.io/elementary/docker:stable bash -c '. /etc/os-release && echo "$VERSION_ID"')
+          version=$(echo "$version" | tr -d '[:space:]')
+          echo "version=v${version}" >> "$GITHUB_OUTPUT"
+          echo "Detected elementary OS version: v${version}"
+
+      - name: Check if release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.version.outputs.version }}" --repo "${{ github.repository }}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${{ steps.version.outputs.version }} already exists, skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download community logo and convert to ICO
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          curl -fsSL -o community-black.png \
+            "https://raw.githubusercontent.com/elementary/brand/main/community/community-black.png"
+          sudo apt-get update && sudo apt-get install -y imagemagick
+          convert community-black.png -define icon:auto-resize=256,128,64,48,32,16 elementary-community.ico
+
+      - name: Export base rootfs
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          container_id=$(docker create ghcr.io/elementary/docker:stable)
+          docker export "$container_id" -o rootfs.tar
+          docker rm "$container_id"
+          mkdir rootfs-work
+          tar xf rootfs.tar -C rootfs-work
+
+      - name: Apply WSL customizations
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          # WSL config files
+          cp rootfs/etc/wsl-distribution.conf rootfs-work/etc/
+          cp rootfs/etc/wsl.conf rootfs-work/etc/
+          cp rootfs/etc/oobe.sh rootfs-work/etc/
+          chmod +x rootfs-work/etc/oobe.sh
+
+          # Terminal profile and icon
+          mkdir -p rootfs-work/usr/lib/wsl
+          cp terminal-profile.json rootfs-work/usr/lib/wsl/
+          cp elementary-community.ico rootfs-work/usr/lib/wsl/
+
+          # Mask systemd units that conflict with WSL
+          for unit in \
+            systemd-resolved.service \
+            systemd-networkd.service \
+            NetworkManager.service \
+            systemd-tmpfiles-setup.service \
+            systemd-tmpfiles-clean.service \
+            systemd-tmpfiles-clean.timer \
+            systemd-tmpfiles-setup-dev-early.service \
+            systemd-tmpfiles-setup-dev.service \
+            tmp.mount; do
+            ln -sf /dev/null "rootfs-work/etc/systemd/system/$unit"
+          done
+
+          # Remove resolv.conf so WSL generates it
+          rm -f rootfs-work/etc/resolv.conf
+
+          # Clean up apt caches
+          rm -rf rootfs-work/var/lib/apt/lists/* rootfs-work/tmp/* rootfs-work/var/tmp/*
+
+      - name: Package rootfs
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          tar czf elementaryOS.wsl -C rootfs-work .
+          ls -lh elementaryOS.wsl
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.version }}" \
+            elementaryOS.wsl \
+            --repo "${{ github.repository }}" \
+            --title "elementary OS WSL ${{ steps.version.outputs.version }}" \
+            --notes "$(cat <<'EOF'
+          elementary OS WSL distribution image.
+
+          ## Installation
+          ```
+          wsl --install --from-file elementaryOS.wsl
+          ```
+          EOF
+          )"
