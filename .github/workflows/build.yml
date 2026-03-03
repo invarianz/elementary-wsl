@@ -1,4 +1,4 @@
-name: Build elementary WSL
+name: Build elementary OS WSL
 
 on:
   workflow_dispatch:
@@ -87,9 +87,9 @@ jobs:
           gh release create "${{ steps.version.outputs.version }}" \
             elementaryOS.wsl \
             --repo "${{ github.repository }}" \
-            --title "elementary WSL ${{ steps.version.outputs.version }}" \
+            --title "elementary OS WSL ${{ steps.version.outputs.version }}" \
             --notes "$(cat <<'EOF'
-          elementary WSL distribution image.
+          elementary OS WSL distribution image.
 
           ## Installation
           ```
