@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/elementary/brand/main/community/community-black.png" alt="elementary community logo" width="128">
 </p>
 
-<h1 align="center">elementary OS WSL</h1>
+<h1 align="center">elementary WSL</h1>
 
 <p align="center">
   <a href="https://github.com/invarianz/elementary-wsl/actions/workflows/build.yml">

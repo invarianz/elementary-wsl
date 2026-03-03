@@ -1,4 +1,4 @@
-name: Build elementary OS WSL
+name: Build elementary WSL
 
 on:
   workflow_dispatch:
@@ -18,10 +18,14 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          version=$(docker run --rm ghcr.io/elementary/docker:stable bash -c '. /etc/os-release && echo "$VERSION_ID"')
-          version=$(echo "$version" | tr -d '[:space:]')
-          echo "version=v${version}" >> "$GITHUB_OUTPUT"
-          echo "Detected elementary OS version: v${version}"
+          full_version=$(docker run --rm ghcr.io/elementary/docker:stable bash -c '. /etc/os-release && echo "$VERSION"')
+          version=$(echo "$full_version" | grep -o '[0-9][0-9.]*')
+          if [ -z "$version" ]; then
+            echo "::error::Failed to extract version from os-release"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Detected elementary OS version: ${version}"
 
       - name: Export base rootfs
         run: |
@@ -83,9 +87,9 @@ jobs:
           gh release create "${{ steps.version.outputs.version }}" \
             elementaryOS.wsl \
             --repo "${{ github.repository }}" \
-            --title "elementary OS WSL ${{ steps.version.outputs.version }}" \
+            --title "elementary WSL ${{ steps.version.outputs.version }}" \
             --notes "$(cat <<'EOF'
-          elementary OS WSL distribution image.
+          elementary WSL distribution image.
 
           ## Installation
           ```
