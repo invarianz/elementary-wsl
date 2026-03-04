@@ -62,7 +62,7 @@ jobs:
           elementary-minimal
           elementary-standard
           io.elementary.terminal
-          io.elementary.appcenter
+          appcenter
           wslu
           ubuntu-wsl
           EOF
