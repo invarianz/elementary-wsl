@@ -15,11 +15,152 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract version
+      - name: Install debootstrap
+        run: sudo apt-get update && sudo apt-get install -y debootstrap
+
+      - name: Clone elementary/os for upstream configs
+        run: git clone --depth 1 https://github.com/elementary/os.git /tmp/elementary-os
+
+      - name: Read upstream config variables
+        id: config
+        run: |
+          . /tmp/elementary-os/etc/terraform-amd64.conf
+          echo "basecodename=${BASECODENAME}" >> "$GITHUB_OUTPUT"
+          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "mirror=${MIRROR_URL}" >> "$GITHUB_OUTPUT"
+          echo "Upstream config: BASECODENAME=${BASECODENAME} CHANNEL=${CHANNEL} VERSION=${VERSION}"
+
+      - name: Prepare PPA sources from upstream templates
+        run: |
+          BASECODENAME="${{ steps.config.outputs.basecodename }}"
+          CHANNEL="${{ steps.config.outputs.channel }}"
+
+          # Substitute placeholders in upstream PPA templates
+          sed "s/@CHANNEL/${CHANNEL}/g; s/@BASECODENAME/${BASECODENAME}/g" \
+            /tmp/elementary-os/etc/config/archives/elementary.list > /tmp/elementary.list
+          sed "s/@CHANNEL/${CHANNEL}/g; s/@BASECODENAME/${BASECODENAME}/g" \
+            /tmp/elementary-os/etc/config/archives/patches.list > /tmp/patches.list
+          cp /tmp/elementary-os/etc/config/archives/patches.pref /tmp/patches.pref
+
+          echo "--- elementary.list ---"
+          cat /tmp/elementary.list
+          echo "--- patches.list ---"
+          cat /tmp/patches.list
+          echo "--- patches.pref ---"
+          cat /tmp/patches.pref
+
+      - name: Debootstrap base system
+        run: |
+          sudo debootstrap \
+            --arch=amd64 \
+            --include=ca-certificates,gpg \
+            "${{ steps.config.outputs.basecodename }}" \
+            /rootfs \
+            "${{ steps.config.outputs.mirror }}"
+
+      - name: Configure and install packages in chroot
+        run: |
+          BASECODENAME="${{ steps.config.outputs.basecodename }}"
+
+          # Mount virtual filesystems for chroot
+          sudo mount --bind /dev /rootfs/dev
+          sudo mount --bind /dev/pts /rootfs/dev/pts
+          sudo mount -t proc proc /rootfs/proc
+          sudo mount -t sysfs sys /rootfs/sys
+          sudo mount -t tmpfs tmpfs /rootfs/tmp
+
+          # Prevent services from starting during install
+          sudo tee /rootfs/usr/sbin/policy-rc.d > /dev/null << 'POLICY'
+          #!/bin/sh
+          exit 101
+          POLICY
+          sudo chmod +x /rootfs/usr/sbin/policy-rc.d
+
+          # Copy host DNS config so chroot can resolve
+          sudo cp /etc/resolv.conf /rootfs/etc/resolv.conf
+
+          # Install PPA source lists and apt pinning
+          sudo cp /tmp/elementary.list /rootfs/etc/apt/sources.list.d/
+          sudo cp /tmp/patches.list /rootfs/etc/apt/sources.list.d/
+          sudo cp /tmp/patches.pref /rootfs/etc/apt/preferences.d/
+
+          # Import PPA signing keys and update
+          sudo chroot /rootfs bash -c "
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update || true
+            apt-get install -y software-properties-common
+            add-apt-repository -y ppa:elementary-os/stable
+            add-apt-repository -y ppa:elementary-os/os-patches
+            # Remove auto-generated source files (keys are already imported;
+            # we keep the upstream-sourced .list files placed earlier)
+            rm -f /etc/apt/sources.list.d/elementary-os-ubuntu-*.sources \
+                  /etc/apt/sources.list.d/elementary-os-ubuntu-*.list 2>/dev/null || true
+            apt-get update
+          "
+
+          # Install elementary-os-overlay first (provides apt pinning for base-files)
+          # then dist-upgrade to pull patched base-files, bash, etc.
+          sudo chroot /rootfs bash -c "
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get install -y elementary-os-overlay
+            apt-get dist-upgrade -y
+          "
+
+          # Install elementary metapackages and WSL packages
+          sudo chroot /rootfs bash -c "
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get install -y --no-install-recommends \
+              elementary-minimal \
+              elementary-standard \
+              wslu \
+              ubuntu-wsl \
+              io.elementary.appcenter \
+              io.elementary.terminal \
+              io.elementary.code
+          "
+
+          # Run upstream blacklist removal
+          sudo chroot /rootfs bash -c "
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get install -y --no-install-recommends git
+
+            git clone --depth 1 https://github.com/elementary/seeds.git --single-branch --branch '${BASECODENAME}' /tmp/seeds
+            git clone --depth 1 https://github.com/elementary/platform.git --single-branch --branch '${BASECODENAME}' /tmp/platform || true
+
+            for package in \$(cat /tmp/seeds/blacklist /tmp/platform/blacklist 2>/dev/null | grep -v '#'); do
+              apt-get autoremove --purge -f -q -y \"\$package\" 2>/dev/null || true
+            done
+
+            apt-get autoremove --purge -f -q -y git
+            rm -rf /tmp/seeds /tmp/platform
+          "
+
+          # Clean up
+          sudo chroot /rootfs bash -c "
+            apt-get clean
+            rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+          "
+
+          # Remove policy-rc.d
+          sudo rm -f /rootfs/usr/sbin/policy-rc.d
+
+          # Unmount virtual filesystems
+          sudo umount /rootfs/tmp || true
+          sudo umount /rootfs/sys || true
+          sudo umount /rootfs/proc || true
+          sudo umount /rootfs/dev/pts || true
+          sudo umount /rootfs/dev || true
+
+      - name: Extract version from rootfs
         id: version
         run: |
-          full_version=$(docker run --rm ghcr.io/elementary/docker:stable bash -c '. /etc/os-release && echo "$VERSION"')
-          version=$(echo "$full_version" | grep -o '[0-9][0-9.]*')
+          . /rootfs/etc/os-release
+          version=$(echo "$VERSION" | grep -o '[0-9][0-9.]*')
           if [ -z "$version" ]; then
             echo "::error::Failed to extract version from os-release"
             exit 1
@@ -27,28 +168,21 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Detected elementary OS version: ${version}"
 
-      - name: Export base rootfs
-        run: |
-          container_id=$(docker create ghcr.io/elementary/docker:stable)
-          docker export "$container_id" -o rootfs.tar
-          docker rm "$container_id"
-          mkdir rootfs-work
-          tar xf rootfs.tar -C rootfs-work
-
       - name: Apply WSL customizations
         run: |
           # WSL config files
-          cp rootfs/etc/wsl-distribution.conf rootfs-work/etc/
-          cp rootfs/etc/wsl.conf rootfs-work/etc/
-          cp rootfs/etc/oobe.sh rootfs-work/etc/
-          chmod +x rootfs-work/etc/oobe.sh
+          sudo cp rootfs/etc/wsl-distribution.conf /rootfs/etc/
+          sudo cp rootfs/etc/wsl.conf /rootfs/etc/
+          sudo cp rootfs/etc/oobe.sh /rootfs/etc/
+          sudo chmod +x /rootfs/etc/oobe.sh
 
           # Terminal profile and icon
-          mkdir -p rootfs-work/usr/lib/wsl
-          cp terminal-profile.json rootfs-work/usr/lib/wsl/
-          cp elementary-community.ico rootfs-work/usr/lib/wsl/
+          sudo mkdir -p /rootfs/usr/lib/wsl
+          sudo cp terminal-profile.json /rootfs/usr/lib/wsl/
+          sudo cp elementary-community.ico /rootfs/usr/lib/wsl/
 
           # Mask systemd units that conflict with WSL
+          sudo mkdir -p /rootfs/etc/systemd/system
           for unit in \
             systemd-resolved.service \
             systemd-networkd.service \
@@ -59,18 +193,15 @@ jobs:
             systemd-tmpfiles-setup-dev-early.service \
             systemd-tmpfiles-setup-dev.service \
             tmp.mount; do
-            ln -sf /dev/null "rootfs-work/etc/systemd/system/$unit"
+            sudo ln -sf /dev/null "/rootfs/etc/systemd/system/$unit"
           done
 
           # Remove resolv.conf so WSL generates it
-          rm -f rootfs-work/etc/resolv.conf
-
-          # Clean up apt caches
-          rm -rf rootfs-work/var/lib/apt/lists/* rootfs-work/tmp/* rootfs-work/var/tmp/*
+          sudo rm -f /rootfs/etc/resolv.conf
 
       - name: Package rootfs
         run: |
-          tar czf elementaryOS.wsl -C rootfs-work .
+          sudo tar czf elementaryOS.wsl -C /rootfs .
           ls -lh elementaryOS.wsl
 
       - name: Delete existing release
