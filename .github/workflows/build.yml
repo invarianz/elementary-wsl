@@ -61,10 +61,7 @@ jobs:
           cat > "$BUILD_DIR/config/package-lists/desktop.list.chroot_install" << 'EOF'
           elementary-minimal
           elementary-standard
-          io.elementary.terminal
-          appcenter
           wslu
-          ubuntu-wsl
           EOF
 
           # Remove ISO-only package lists
@@ -97,6 +94,11 @@ jobs:
       - name: Apply WSL customizations
         run: |
           CHROOT="/tmp/elementary-os/tmp/amd64/chroot"
+
+          # Install WSL-specific packages after lb chroot hooks have run,
+          # which may remove packages not protected by elementary-desktop deps
+          chroot "$CHROOT" apt-get update
+          chroot "$CHROOT" apt-get install -y io.elementary.terminal appcenter ubuntu-wsl
 
           # WSL config files
           cp rootfs/etc/wsl-distribution.conf "$CHROOT/etc/"
