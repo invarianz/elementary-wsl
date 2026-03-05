@@ -26,3 +26,16 @@ wsl --install --from-file elementaryOS.wsl
 - Windows Terminal profile with elementary light/dark color schemes
 - Start menu shortcut with elementary community icon
 - First-run user setup (OOBE)
+- Terminal and AppCenter available out of the box via WSLg
+
+## How it's built
+
+The build clones the upstream [`elementary/os`](https://github.com/elementary/os) repository and runs its live-build pipeline (`auto/config`, PPA sources, GPG keys, apt pinning, chroot hooks) unchanged. The same container environment (`debian:latest`, `--privileged`) is used.
+
+The only differences from a vanilla elementary OS ISO build:
+
+- **Lighter package list** — `elementary-minimal` + `elementary-standard` instead of `elementary-desktop` (no full Pantheon shell)
+- **No kernel** — WSL provides its own (`--linux-packages none`)
+- **Stops before ISO creation** — runs `lb bootstrap` + `lb chroot` only, then extracts the chroot as a rootfs tarball
+- **GUI apps installed after hooks** — Terminal and AppCenter are added after the upstream blacklist hook runs, so they survive package removal
+- **WSL integration layer** — `wsl.conf`, OOBE script, systemd unit masking, Windows Terminal profile, and start menu icon
