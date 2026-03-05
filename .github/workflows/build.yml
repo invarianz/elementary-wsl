@@ -98,7 +98,7 @@ jobs:
           # Install WSL-specific packages after lb chroot hooks have run,
           # which may remove packages not protected by elementary-desktop deps
           chroot "$CHROOT" apt-get update
-          chroot "$CHROOT" apt-get install -y io.elementary.terminal appcenter ubuntu-wsl
+          chroot "$CHROOT" apt-get install -y io.elementary.terminal appcenter ubuntu-wsl flatpak elementary-default-settings
 
           # WSL config files
           cp rootfs/etc/wsl-distribution.conf "$CHROOT/etc/"
