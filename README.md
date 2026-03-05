@@ -14,7 +14,7 @@ A custom [WSL](https://learn.microsoft.com/en-us/windows/wsl/) distribution base
 
 ## Installation
 
-Download `elementaryOS.wsl` from the [latest release](https://github.com/invarianz/elementary-wsl/releases/latest) and run:
+Download `elementaryOS.wsl` from the [latest release](https://github.com/invarianz/elementary-wsl/releases/latest) and run (or just double click on the file):
 
 ```
 wsl --install --from-file elementaryOS.wsl
@@ -23,10 +23,10 @@ wsl --install --from-file elementaryOS.wsl
 ## Features
 
 - Systemd enabled by default
-- Windows Terminal profile with elementary light/dark color schemes
+- Windows Terminal profile with io.elementary.terminal light/dark color schemes
 - Start menu shortcut with elementary community icon
 - First-run user setup (OOBE)
-- Terminal and AppCenter available out of the box via WSLg
+- **Terminal** and **AppCenter** available out of the box via WSLg
 
 ## How it's built
 
