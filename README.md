@@ -65,6 +65,8 @@ The following packages are installed **after** `lb chroot` finishes (i.e., after
 
 The upstream live-build configuration includes a blacklist hook that removes packages not pulled in as dependencies of `elementary-desktop`. Since this build doesn't install `elementary-desktop`, these packages would be removed if they were in the normal package list. Installing them after the hooks ensures they survive.
 
+`snapd` is purged immediately after installation. It gets pulled in as a dependency of `ubuntu-wsl`, but elementary OS uses Flatpak — not Snap — for app distribution.
+
 ### System-wide Flatpak remotes
 
 `.flatpakrepo` files are dropped into `/etc/flatpak/remotes.d/` for two remotes:

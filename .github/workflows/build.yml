@@ -103,6 +103,10 @@ jobs:
           chroot "$CHROOT" apt-get update
           chroot "$CHROOT" apt-get install -y io.elementary.terminal appcenter ubuntu-wsl flatpak elementary-default-settings
 
+          # Remove snapd — elementary OS uses Flatpak, not Snap
+          chroot "$CHROOT" apt-get purge -y snapd
+          chroot "$CHROOT" apt-get autoremove -y --purge
+
           umount "$CHROOT/proc"
 
           # Set up system-wide Flatpak remotes for WSLg Start Menu integration
