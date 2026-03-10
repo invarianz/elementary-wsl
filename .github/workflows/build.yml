@@ -107,17 +107,18 @@ jobs:
           chroot "$CHROOT" apt-get purge -y snapd
           chroot "$CHROOT" apt-get autoremove -y --purge
 
-          umount "$CHROOT/proc"
-
           # Set up system-wide Flatpak remotes for WSLg Start Menu integration
-          # (placed in remotes.d rather than using flatpak CLI, which needs /proc)
-          mkdir -p "$CHROOT/etc/flatpak/remotes.d"
-          curl -fsSL -o "$CHROOT/etc/flatpak/remotes.d/appcenter.flatpakrepo" https://flatpak.elementary.io/repo.flatpakrepo
-          curl -fsSL -o "$CHROOT/etc/flatpak/remotes.d/flathub.flatpakrepo" https://dl.flathub.org/repo/flathub.flatpakrepo
+          curl -fsSL -o "$CHROOT/tmp/appcenter.flatpakrepo" https://flatpak.elementary.io/repo.flatpakrepo
+          curl -fsSL -o "$CHROOT/tmp/flathub.flatpakrepo" https://dl.flathub.org/repo/flathub.flatpakrepo
+          chroot "$CHROOT" flatpak remote-add --system --if-not-exists --from appcenter /tmp/appcenter.flatpakrepo
+          chroot "$CHROOT" flatpak remote-add --system --if-not-exists --from flathub /tmp/flathub.flatpakrepo
+          rm -f "$CHROOT/tmp/appcenter.flatpakrepo" "$CHROOT/tmp/flathub.flatpakrepo"
 
           # Remove per-user Flatpak config from skeleton so AppCenter uses system-wide installs
           # (per-user .desktop files aren't visible to WSLg in the Windows Start Menu)
           rm -rf "$CHROOT/etc/skel/.local/share/flatpak"
+
+          umount "$CHROOT/proc"
 
           # WSL config files
           cp rootfs/etc/wsl-distribution.conf "$CHROOT/etc/"

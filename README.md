@@ -69,10 +69,10 @@ The upstream live-build configuration includes a blacklist hook that removes pac
 
 ### System-wide Flatpak remotes
 
-`.flatpakrepo` files are dropped into `/etc/flatpak/remotes.d/` for two remotes:
+Two system-wide Flatpak remotes are registered using `flatpak remote-add --system`:
 
-- **AppCenter** (`appcenter.flatpakrepo`) — elementary's curated app catalog
-- **Flathub** (`flathub.flatpakrepo`) — the community Flatpak repository
+- **AppCenter** — elementary's curated app catalog (`flatpak.elementary.io`)
+- **Flathub** — the community Flatpak repository (`dl.flathub.org`)
 
 The per-user Flatpak skeleton directory (`/etc/skel/.local/share/flatpak`) is also removed so that AppCenter defaults to system-wide installs.
 
