@@ -32,11 +32,85 @@ wsl --install --from-file elementaryOS.wsl
 
 The build clones the upstream [`elementary/os`](https://github.com/elementary/os) repository and runs its live-build pipeline (`auto/config`, PPA sources, GPG keys, apt pinning, chroot hooks) unchanged. The same container environment (`debian:latest`, `--privileged`) is used.
 
-The only differences from a vanilla elementary OS ISO build:
+Every divergence from a vanilla elementary OS ISO build is documented below.
 
-- **Lighter package list** — `elementary-minimal` + `elementary-standard` instead of `elementary-desktop` (no full Pantheon shell)
-- **No kernel** — WSL provides its own (`--linux-packages none`)
-- **Stops before ISO creation** — runs `lb bootstrap` + `lb chroot` only, then extracts the chroot as a rootfs tarball
-- **GUI apps installed after hooks** — Terminal and AppCenter are added after the upstream blacklist hook runs, so they survive package removal
-- **System-wide Flatpak remotes** — AppCenter and Flathub are configured system-wide so apps installed via AppCenter appear in the Windows Start Menu (WSLg only scans system-wide `.desktop` files)
-- **WSL integration layer** — `wsl.conf`, OOBE script, systemd unit masking, Windows Terminal profile, and start menu icon
+### Package list
+
+The desktop package list (`desktop.list.chroot_install`) is replaced with:
+
+- `elementary-minimal`
+- `elementary-standard`
+- `wslu` (WSL utilities)
+
+This replaces `elementary-desktop`, which pulls in the full Pantheon shell (compositor, dock, panel, greeter, etc.) — none of which are needed under WSL.
+
+Two ISO-only package lists are also removed:
+
+- `desktop.list.chroot_live` — packages for the live USB session
+- `pool.list.binary` — packages bundled into the ISO's offline pool
+
+### No kernel
+
+The live-build option `--linux-packages` is changed from `linux-image` to `none`. WSL provides its own kernel; installing one inside the rootfs would be wasted space.
+
+### Post-hook package installation
+
+The following packages are installed **after** `lb chroot` finishes (i.e., after all upstream hooks have run):
+
+- `io.elementary.terminal`
+- `appcenter`
+- `ubuntu-wsl`
+- `flatpak`
+- `elementary-default-settings`
+
+The upstream live-build configuration includes a blacklist hook that removes packages not pulled in as dependencies of `elementary-desktop`. Since this build doesn't install `elementary-desktop`, these packages would be removed if they were in the normal package list. Installing them after the hooks ensures they survive.
+
+### System-wide Flatpak remotes
+
+`.flatpakrepo` files are dropped into `/etc/flatpak/remotes.d/` for two remotes:
+
+- **AppCenter** (`appcenter.flatpakrepo`) — elementary's curated app catalog
+- **Flathub** (`flathub.flatpakrepo`) — the community Flatpak repository
+
+The per-user Flatpak skeleton directory (`/etc/skel/.local/share/flatpak`) is also removed so that AppCenter defaults to system-wide installs.
+
+This is required because WSLg only exposes **system-wide** `.desktop` files to the Windows Start Menu. Apps installed per-user would work inside the terminal but would be invisible in the Start Menu.
+
+### Masked systemd units
+
+Nine systemd units are masked (symlinked to `/dev/null`) because WSL manages the corresponding subsystems itself:
+
+| Unit | Reason |
+|---|---|
+| `systemd-resolved.service` | WSL auto-generates `/etc/resolv.conf` from Windows DNS settings |
+| `systemd-networkd.service` | WSL manages the virtual network adapter |
+| `NetworkManager.service` | WSL manages the virtual network adapter |
+| `systemd-tmpfiles-setup.service` | WSL mounts its own `/tmp` and `/dev` |
+| `systemd-tmpfiles-setup-dev-early.service` | WSL mounts its own `/tmp` and `/dev` |
+| `systemd-tmpfiles-setup-dev.service` | WSL mounts its own `/tmp` and `/dev` |
+| `systemd-tmpfiles-clean.service` | No tmpfiles to clean when setup is masked |
+| `systemd-tmpfiles-clean.timer` | No tmpfiles to clean when setup is masked |
+| `tmp.mount` | WSL mounts `/tmp` itself |
+
+### DNS
+
+`/etc/resolv.conf` is deleted from the rootfs. WSL auto-generates this file on every boot using the Windows host's network configuration. Leaving a static copy would override WSL's DNS resolution.
+
+### WSL configuration files
+
+Three configuration files are copied into the rootfs:
+
+- **`/etc/wsl.conf`** — enables systemd (`[boot] systemd=true`)
+- **`/etc/wsl-distribution.conf`** — configures the OOBE (first-run user creation), distribution icon, and Windows Terminal profile path
+- **`/etc/oobe.sh`** — the OOBE script itself, which runs on first launch to create the initial user account
+
+### Windows integration
+
+Two files are placed in `/usr/lib/wsl/` for Windows Terminal integration:
+
+- **`terminal-profile.json`** — a terminal profile with elementary-themed light/dark color schemes
+- **`elementary-community.ico`** — the elementary community icon, used in the Start Menu and Windows Terminal tab
+
+### Output format
+
+The build runs only `lb bootstrap` and `lb chroot`, then packages the chroot directory as a gzip-compressed tarball (`elementaryOS.wsl`). The `lb binary` stage (which assembles the ISO image, bootloader, and live filesystem) is skipped entirely. WSL imports distributions from rootfs tarballs, not ISOs.
