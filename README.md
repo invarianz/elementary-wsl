@@ -38,4 +38,5 @@ The only differences from a vanilla elementary OS ISO build:
 - **No kernel** — WSL provides its own (`--linux-packages none`)
 - **Stops before ISO creation** — runs `lb bootstrap` + `lb chroot` only, then extracts the chroot as a rootfs tarball
 - **GUI apps installed after hooks** — Terminal and AppCenter are added after the upstream blacklist hook runs, so they survive package removal
+- **System-wide Flatpak remotes** — AppCenter and Flathub are configured system-wide so apps installed via AppCenter appear in the Windows Start Menu (WSLg only scans system-wide `.desktop` files)
 - **WSL integration layer** — `wsl.conf`, OOBE script, systemd unit masking, Windows Terminal profile, and start menu icon
