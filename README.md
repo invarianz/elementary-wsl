@@ -78,19 +78,25 @@ This is required because WSLg only exposes **system-wide** `.desktop` files to t
 
 ### Masked systemd units
 
-Nine systemd units are masked (symlinked to `/dev/null`) because WSL manages the corresponding subsystems itself:
+29 systemd units are masked (symlinked to `/dev/null`) across six categories:
 
-| Unit | Reason |
-|---|---|
-| `systemd-resolved.service` | WSL auto-generates `/etc/resolv.conf` from Windows DNS settings |
-| `systemd-networkd.service` | WSL manages the virtual network adapter |
-| `NetworkManager.service` | WSL manages the virtual network adapter |
-| `systemd-tmpfiles-setup.service` | WSL mounts its own `/tmp` and `/dev` |
-| `systemd-tmpfiles-setup-dev-early.service` | WSL mounts its own `/tmp` and `/dev` |
-| `systemd-tmpfiles-setup-dev.service` | WSL mounts its own `/tmp` and `/dev` |
-| `systemd-tmpfiles-clean.service` | No tmpfiles to clean when setup is masked |
-| `systemd-tmpfiles-clean.timer` | No tmpfiles to clean when setup is masked |
-| `tmp.mount` | WSL mounts `/tmp` itself |
+**Networking** — WSL manages DNS and the virtual network adapter:
+`systemd-resolved.service`, `systemd-networkd.service`, `NetworkManager.service`, `avahi-daemon.service`, `avahi-daemon.socket`
+
+**Tmpfiles and mounts** — WSL mounts its own `/tmp` and `/dev`:
+`systemd-tmpfiles-setup.service`, `systemd-tmpfiles-setup-dev-early.service`, `systemd-tmpfiles-setup-dev.service`, `systemd-tmpfiles-clean.service`, `systemd-tmpfiles-clean.timer`, `tmp.mount`
+
+**Hardware** — no physical hardware in WSL:
+`ModemManager.service`, `wpa_supplicant.service`, `bolt.service`, `udisks2.service`, `iio-sensor-proxy.service`, `tpm-udev.path`, `fwupd-refresh.timer`, `secureboot-db.service`
+
+**Cloud init** — WSL is not a cloud instance:
+`cloud-config.service`, `cloud-final.service`, `cloud-init.service`, `cloud-init-local.service`, `cloud-init-hotplugd.socket`
+
+**Crash reporting** — not useful in WSL:
+`apport.service`, `apport-autoreport.path`, `apport-autoreport.timer`, `apport-forward.socket`
+
+**Enterprise management** — not applicable:
+`landscape-client.service`
 
 ### DNS
 

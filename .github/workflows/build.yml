@@ -95,10 +95,15 @@ jobs:
         run: |
           CHROOT="/tmp/elementary-os/tmp/amd64/chroot"
 
+          # Mount /proc so package postinst scripts can call systemctl cleanly
+          mount --bind /proc "$CHROOT/proc"
+
           # Install WSL-specific packages after lb chroot hooks have run,
           # which may remove packages not protected by elementary-desktop deps
           chroot "$CHROOT" apt-get update
           chroot "$CHROOT" apt-get install -y io.elementary.terminal appcenter ubuntu-wsl flatpak elementary-default-settings
+
+          umount "$CHROOT/proc"
 
           # Set up system-wide Flatpak remotes for WSLg Start Menu integration
           # (placed in remotes.d rather than using flatpak CLI, which needs /proc)
@@ -121,18 +126,46 @@ jobs:
           cp terminal-profile.json "$CHROOT/usr/lib/wsl/"
           cp elementary-community.ico "$CHROOT/usr/lib/wsl/"
 
-          # Mask systemd units that conflict with WSL
+          # Mask systemd units that are unnecessary in WSL:
+          #   Networking:   systemd-resolved, systemd-networkd, NetworkManager, avahi-daemon
+          #   Tmpfiles:     systemd-tmpfiles-*, tmp.mount
+          #   Hardware:     ModemManager, wpa_supplicant, bolt, udisks2, iio-sensor-proxy,
+          #                 tpm-udev, fwupd, secureboot-db
+          #   Cloud init:   cloud-config, cloud-final, cloud-init, cloud-init-local,
+          #                 cloud-init-hotplugd
+          #   Crash:        apport, apport-autoreport, apport-forward
+          #   Enterprise:   landscape-client
           mkdir -p "$CHROOT/etc/systemd/system"
           for unit in \
             systemd-resolved.service \
             systemd-networkd.service \
             NetworkManager.service \
+            avahi-daemon.service \
+            avahi-daemon.socket \
             systemd-tmpfiles-setup.service \
-            systemd-tmpfiles-clean.service \
-            systemd-tmpfiles-clean.timer \
             systemd-tmpfiles-setup-dev-early.service \
             systemd-tmpfiles-setup-dev.service \
-            tmp.mount; do
+            systemd-tmpfiles-clean.service \
+            systemd-tmpfiles-clean.timer \
+            tmp.mount \
+            ModemManager.service \
+            wpa_supplicant.service \
+            bolt.service \
+            udisks2.service \
+            iio-sensor-proxy.service \
+            tpm-udev.path \
+            fwupd-refresh.timer \
+            secureboot-db.service \
+            cloud-config.service \
+            cloud-final.service \
+            cloud-init.service \
+            cloud-init-local.service \
+            cloud-init-hotplugd.socket \
+            apport.service \
+            apport-autoreport.path \
+            apport-autoreport.timer \
+            apport-forward.socket \
+            landscape-client.service; do
             ln -sf /dev/null "$CHROOT/etc/systemd/system/$unit"
           done
 
