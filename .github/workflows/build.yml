@@ -114,6 +114,9 @@ jobs:
           chroot "$CHROOT" flatpak remote-add --system --if-not-exists --from flathub /tmp/flathub.flatpakrepo
           rm -f "$CHROOT/tmp/appcenter.flatpakrepo" "$CHROOT/tmp/flathub.flatpakrepo"
 
+          # Fetch appstream metadata so AppCenter has a catalog on first launch
+          chroot "$CHROOT" flatpak update --appstream --system
+
           # Remove per-user Flatpak config from skeleton so AppCenter uses system-wide installs
           # (per-user .desktop files aren't visible to WSLg in the Windows Start Menu)
           rm -rf "$CHROOT/etc/skel/.local/share/flatpak"

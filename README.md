@@ -74,6 +74,8 @@ Two system-wide Flatpak remotes are registered using `flatpak remote-add --syste
 - **AppCenter** — elementary's curated app catalog (`flatpak.elementary.io`)
 - **Flathub** — the community Flatpak repository (`dl.flathub.org`)
 
+Appstream metadata is pre-fetched at build time (`flatpak update --appstream`) so that AppCenter has a populated catalog on first launch.
+
 The per-user Flatpak skeleton directory (`/etc/skel/.local/share/flatpak`) is also removed so that AppCenter defaults to system-wide installs.
 
 This is required because WSLg only exposes **system-wide** `.desktop` files to the Windows Start Menu. Apps installed per-user would work inside the terminal but would be invisible in the Start Menu.
